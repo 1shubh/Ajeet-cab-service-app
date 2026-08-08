@@ -25,6 +25,10 @@
     },
     "plugins": [
       "expo-router",
+       ["expo-image-picker", {
+        "photosPermission": "Allow access to add a student photo during admission.",
+        "cameraPermission": "Allow camera access to take a student photo during admission."
+      }],
       [
         "expo-splash-screen",
         {

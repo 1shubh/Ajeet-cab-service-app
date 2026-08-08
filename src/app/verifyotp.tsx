@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "@/redux/store";
 import { verifyOtp } from "@/redux/slice/authSlice";
+import { fetchUserProfile } from "@/redux/slice/userdetails";
 
 const VerifyOtp = () => {
   const [otp, setOtp] = useState("");
@@ -24,15 +25,19 @@ const VerifyOtp = () => {
     dispatch(verifyOtp({ phone: phone, otp: otp }));
   };
 
-  useEffect(() => {
+ useEffect(() => {
     if (otpVerified && user) {
-      if (user.role === "admin") {
-        router.push("/(admin)");
-      } else if (user.role === "student") {
-        router.push("/(student)");
-      } else if (user.role === "driver") {
-        router.push("/(driver)");
-      }
+      // ✅ Fetch profile immediately after OTP verified,
+      // THEN navigate — profile will be ready when Home mounts
+      dispatch(fetchUserProfile()).then(() => {
+        if (user.role === "admin") {
+          router.replace("/(admin)");
+        } else if (user.role === "student") {
+          router.replace("/(student)");
+        } else if (user.role === "driver") {
+          router.replace("/(driver)");
+        }
+      });
     }
   }, [otpVerified]);
 

@@ -1,22 +1,27 @@
+// app/_layout.tsx
 import {
   DarkTheme,
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
-import React, { useEffect } from "react";
-import { useColorScheme } from "react-native";
+import React, { useEffect, useState } from "react";
+import { useColorScheme, View, ActivityIndicator } from "react-native";
 import { SplashScreen, Stack } from "expo-router";
 import "../global.css";
 import { Provider } from "react-redux";
 import { useFonts } from "expo-font";
-import { AnimatedSplashOverlay } from "@/components/animated-icon";
-import AppTabs from "@/components/app-tabs";
 import { store } from "@/redux/store";
 import { StatusBar } from "expo-status-bar";
+import AuthGate from "@/components/AuthGate";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
-export default function TabLayout() {
+// Keep the splash up until we say otherwise
+SplashScreen.preventAutoHideAsync();
+
+export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const [fontsLoaded, error] = useFonts({
+
+  const [fontsLoaded, fontError] = useFonts({
     "Poppins-Black": require("../../assets/fonts/Poppins-Black.ttf"),
     "Poppins-Bold": require("../../assets/fonts/Poppins-Bold.ttf"),
     "Poppins-ExtraBold": require("../../assets/fonts/Poppins-ExtraBold.ttf"),
@@ -34,25 +39,52 @@ export default function TabLayout() {
   });
 
   useEffect(() => {
-    if (error) throw error;
-    if (fontsLoaded) {
-      SplashScreen.hideAsync();
+    if (fontError) {
+      console.error("Font loading failed:", fontError);
+      SplashScreen.hideAsync(); // don't leave users stuck on splash
     }
-  }, [fontsLoaded, error]);
+  }, [fontError]);
+
+  // Hold the splash until fonts resolve
+  if (!fontsLoaded && !fontError) return null;
 
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+    <SafeAreaProvider>
       <Provider store={store}>
-        <Stack>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="login" options={{ headerShown: false }} />
-          <Stack.Screen name="verifyotp" options={{ headerShown: false }} />
-          <Stack.Screen name="(admin)" options={{ headerShown: false }} />
-          <Stack.Screen name="(driver)" options={{ headerShown: false }} />
-          <Stack.Screen name="(student)" options={{ headerShown: false }} />
-        </Stack>
+        <ThemeProvider
+          value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+        >
+          <AuthGate>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="login" />
+              <Stack.Screen name="verifyotp" />
+              <Stack.Screen name="(admin)" />
+              <Stack.Screen name="(driver)" />
+              <Stack.Screen name="(student)" />
+              <Stack.Screen
+                name="add-student"
+                options={{
+                  presentation: "modal",
+                  animation: "slide_from_bottom",
+                }}
+              />
+              <Stack.Screen
+                name="add-route"
+                options={{
+                  presentation: "modal",
+                  animation: "slide_from_bottom",
+                }}
+              />
+              <Stack.Screen name="myadmissions" />
+              <Stack.Screen name="student/[id]" />
+              <Stack.Screen name="student/edit/[id]" />
+              <Stack.Screen name="route/[id]" />
+            </Stack>
+          </AuthGate>
+          <StatusBar style="light" />
+        </ThemeProvider>
       </Provider>
-      <StatusBar style="light" />
-    </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

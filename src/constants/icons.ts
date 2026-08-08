@@ -8,7 +8,9 @@ import user from "@/assets/icons/user.png";
 import useroutlined from "@/assets/icons/user-inactive.png";
 import rupeeicon from "@/assets/icons/rupee.gif";
 import studentanim from "@/assets/icons/studentanim.gif";
-import routeanim from "@/assets/icons/route.gif"
+import routeanim from "@/assets/icons/route.gif";
+import route from "@/assets/icons/route.png";
+import routeoutlined from "@/assets/icons/route-inactive.png";
 export const icons = {
   homeoutlined,
   home,
@@ -19,5 +21,8 @@ export const icons = {
   user,
   useroutlined,
   rupeeicon,
-  studentanim,routeanim
+  studentanim,
+  routeanim,
+  route,
+  routeoutlined,
 };

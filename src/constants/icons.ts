@@ -11,6 +11,8 @@ import studentanim from "@/assets/icons/studentanim.gif";
 import routeanim from "@/assets/icons/route.gif";
 import route from "@/assets/icons/route.png";
 import routeoutlined from "@/assets/icons/route-inactive.png";
+import van from "@/assets/icons/van.png"
+import vanoutlined from "@/assets/icons/van-inactive.png"
 export const icons = {
   homeoutlined,
   home,
@@ -24,5 +26,5 @@ export const icons = {
   studentanim,
   routeanim,
   route,
-  routeoutlined,
+  routeoutlined,van,vanoutlined
 };

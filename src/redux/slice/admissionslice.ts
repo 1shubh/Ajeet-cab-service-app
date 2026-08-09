@@ -1,7 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { supabase } from "@/lib/supabase";
 import { decode } from "base64-arraybuffer";
-import * as FileSystem from "expo-file-system";
 
 // ============================================================
 // Types
@@ -32,7 +31,10 @@ export interface Student {
 
 export interface AdmissionInput {
   student_name: string;
-  student_photo_uri?: string | null; // file:// when newly picked, https:// when unchanged
+  /** Local file:// URI when freshly picked, https:// when unchanged, null when removed */
+  student_photo_uri?: string | null;
+  /** Present only when the image was just picked — this is what gets uploaded */
+  student_photo_base64?: string | null;
   school_name: string;
   address: string;
   class_name?: string;
@@ -106,8 +108,8 @@ const initialState: AdmissionState = {
 // ============================================================
 // Validation
 //
-// Only validates keys that are actually present, so the same
-// function works for a full create and a partial edit.
+// Only checks keys that are actually present, so the same
+// function serves a full create and a partial edit.
 // ============================================================
 export const validateAdmission = (
   input: Partial<AdmissionInput>
@@ -146,8 +148,11 @@ export const validateAdmission = (
   return errors;
 };
 
-// Create requires every required field to be present, not just
-// valid-if-given. Forcing the keys in makes a missing field fail.
+/**
+ * Create requires every required field to be present, not just
+ * valid-if-given. Forcing the keys in makes a missing field fail
+ * rather than silently pass.
+ */
 export const validateNewAdmission = (
   input: AdmissionInput
 ): Record<string, string> =>
@@ -180,22 +185,27 @@ const getCurrentAppUser = async (): Promise<
   return data ?? null;
 };
 
+/**
+ * Uploads a photo picked by expo-image-picker.
+ *
+ * The picker is asked for `base64: true`, so the bytes arrive
+ * with the asset and there's no filesystem read here at all.
+ * That avoids expo-file-system entirely — its EncodingType API
+ * moved to `expo-file-system/legacy` in SDK 54 and reading
+ * `.Base64` off the new module throws.
+ */
 const uploadStudentPhoto = async (
-  localUri: string,
+  photo: { base64: string; uri: string },
   ownerId: string
 ): Promise<string> => {
-  const ext = localUri.split(".").pop()?.toLowerCase() ?? "jpg";
+  const ext = photo.uri.split(".").pop()?.toLowerCase() ?? "jpg";
   const contentType =
     ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
   const path = `${ownerId}/${Date.now()}.${ext}`;
 
-  const base64 = await FileSystem.readAsStringAsync(localUri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-
   const { error } = await supabase.storage
     .from("student-photos")
-    .upload(path, decode(base64), { contentType, upsert: false });
+    .upload(path, decode(photo.base64), { contentType, upsert: false });
 
   if (error) throw new Error(`Photo upload failed: ${error.message}`);
 
@@ -241,9 +251,12 @@ export const createAdmission = createAsyncThunk<
     }
 
     let photoUrl: string | null = null;
-    if (input.student_photo_uri) {
+    if (input.student_photo_uri && input.student_photo_base64) {
       dispatch(setUploadProgress(30));
-      photoUrl = await uploadStudentPhoto(input.student_photo_uri, appUser.id);
+      photoUrl = await uploadStudentPhoto(
+        { base64: input.student_photo_base64, uri: input.student_photo_uri },
+        appUser.id
+      );
       dispatch(setUploadProgress(70));
     }
 
@@ -332,19 +345,24 @@ export const updateStudent = createAsyncThunk<
 
       const payload: Record<string, any> = {};
 
-      // Photo: upload only when it's a fresh local file
+      // Photo handling:
+      //   null            -> user removed it
+      //   base64 present  -> user picked a new one, upload it
+      //   neither         -> unchanged https:// URL, leave the column alone
       if (changes.student_photo_uri !== undefined) {
         if (changes.student_photo_uri === null) {
           payload.student_photo = null;
-        } else if (changes.student_photo_uri.startsWith("file://")) {
+        } else if (changes.student_photo_base64) {
           dispatch(setUploadProgress(40));
           payload.student_photo = await uploadStudentPhoto(
-            changes.student_photo_uri,
+            {
+              base64: changes.student_photo_base64,
+              uri: changes.student_photo_uri,
+            },
             appUser.id
           );
           dispatch(setUploadProgress(80));
         }
-        // An https:// value means unchanged — omit the field entirely
       }
 
       if (changes.student_name !== undefined)

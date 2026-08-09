@@ -14,6 +14,7 @@ import { store } from "@/redux/store";
 import { StatusBar } from "expo-status-bar";
 import AuthGate from "@/components/AuthGate";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AlertProvider } from "@/components/AlertProvider";
 
 // Keep the splash up until we say otherwise
 SplashScreen.preventAutoHideAsync();
@@ -54,34 +55,55 @@ export default function RootLayout() {
         <ThemeProvider
           value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
         >
-          <AuthGate>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="login" />
-              <Stack.Screen name="verifyotp" />
-              <Stack.Screen name="(admin)" />
-              <Stack.Screen name="(driver)" />
-              <Stack.Screen name="(student)" />
-              <Stack.Screen
-                name="add-student"
-                options={{
-                  presentation: "modal",
-                  animation: "slide_from_bottom",
-                }}
-              />
-              <Stack.Screen
-                name="add-route"
-                options={{
-                  presentation: "modal",
-                  animation: "slide_from_bottom",
-                }}
-              />
-              <Stack.Screen name="myadmissions" />
-              <Stack.Screen name="student/[id]" />
-              <Stack.Screen name="student/edit/[id]" />
-              <Stack.Screen name="route/[id]" />
-            </Stack>
-          </AuthGate>
+          <AlertProvider>
+            <AuthGate>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="login" />
+                <Stack.Screen name="verifyotp" />
+                <Stack.Screen name="(admin)" />
+                <Stack.Screen name="(driver)" />
+                <Stack.Screen name="(student)" />
+                <Stack.Screen
+                  name="add-student"
+                  options={{
+                    presentation: "modal",
+                    animation: "slide_from_bottom",
+                  }}
+                />
+                <Stack.Screen
+                  name="add-route"
+                  options={{
+                    presentation: "modal",
+                    animation: "slide_from_bottom",
+                  }}
+                />
+                <Stack.Screen name="myadmissions" />
+                <Stack.Screen name="student/[id]" />
+                <Stack.Screen name="student/edit/[id]" />
+                <Stack.Screen name="route/[id]" />
+                <Stack.Screen
+                  name="add-driver"
+                  options={{
+                    presentation: "modal",
+                    animation: "slide_from_bottom",
+                  }}
+                />
+                <Stack.Screen name="driver/[id]" />
+                <Stack.Screen name="driver/edit/[id]" />
+                {/* vehicles */}
+                <Stack.Screen
+                  name="add-vehicle"
+                  options={{
+                    presentation: "modal",
+                    animation: "slide_from_bottom",
+                  }}
+                />
+                <Stack.Screen name="vehicle/[id]" />
+                <Stack.Screen name="payments" />
+              </Stack>
+            </AuthGate>
+          </AlertProvider>
           <StatusBar style="light" />
         </ThemeProvider>
       </Provider>

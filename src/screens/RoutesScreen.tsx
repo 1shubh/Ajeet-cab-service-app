@@ -16,7 +16,7 @@ import {
   toggleRouteActive,
   RouteSummary,
 } from "@/redux/slice/routeslice";
-
+import { useAlert } from "@/components/AlertProvider";
 
 // ------------------------------------------------------------
 // Small inline stat
@@ -114,8 +114,9 @@ const RouteCard = ({
 export default function RoutesScreen() {
   const dispatch = useDispatch<AppDispatch>();
   const { summaries, loading, error, submitError } = useSelector(
-    (s: RootState) => s.routes
+    (s: RootState) => s.routes,
   );
+  const { alert, confirm, toast } = useAlert();
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -132,26 +133,31 @@ export default function RoutesScreen() {
     setRefreshing(false);
   };
 
-  const handleToggle = (route: RouteSummary) => {
+  const handleToggle = async (route: RouteSummary) => {
     const turningOff = route.is_active;
 
-    Alert.alert(
-      turningOff ? "Deactivate route?" : "Activate route?",
-      turningOff
+    const ok = await confirm({
+      title: turningOff ? "Deactivate route?" : "Activate route?",
+      message: turningOff
         ? "It will stop appearing when admitting new students."
         : "It will become selectable during admission.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: turningOff ? "Deactivate" : "Activate",
-          style: turningOff ? "destructive" : "default",
-          onPress: () =>
-            dispatch(
-              toggleRouteActive({ id: route.id, is_active: !route.is_active })
-            ),
-        },
-      ]
+      confirmText: turningOff ? "Deactivate" : "Activate",
+      tone: turningOff ? "danger" : "info",
+    });
+
+    if (!ok) return;
+
+    const result = await dispatch(
+      toggleRouteActive({ id: route.id, is_active: !route.is_active }),
     );
+
+    if (toggleRouteActive.rejected.match(result)) {
+      alert("Couldn't update route", result.payload as string, undefined, {
+        tone: "danger",
+      });
+    } else {
+      toast(turningOff ? "Route deactivated" : "Route activated");
+    }
   };
 
   const activeCount = summaries.filter((r) => r.is_active).length;

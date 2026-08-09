@@ -5,13 +5,14 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
 import React, { useEffect, useState, useMemo } from "react";
 import { useLocalSearchParams, router } from "expo-router";
 import { useDispatch, useSelector } from "react-redux";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { AppDispatch, RootState } from "@/redux/store";
 import {
   fetchRouteStops,
@@ -22,8 +23,11 @@ import {
   toggleRouteActive,
   clearRouteSubmitState,
 } from "@/redux/slice/routeslice";
-import Ionicons from "@expo/vector-icons/Ionicons";
-// ------------------------------------------------------------
+import { useAlert } from "@/components/AlertProvider";
+
+// ============================================================
+// Reusable field
+// ============================================================
 const Field = ({
   label,
   value,
@@ -31,6 +35,7 @@ const Field = ({
   placeholder,
   prefix,
   changed,
+  error,
   keyboardType = "default",
   multiline = false,
 }: {
@@ -40,6 +45,7 @@ const Field = ({
   placeholder: string;
   prefix?: string;
   changed?: boolean;
+  error?: string;
   keyboardType?: "default" | "numeric";
   multiline?: boolean;
 }) => (
@@ -54,10 +60,16 @@ const Field = ({
     </View>
     <View
       className={`border-2 rounded-xl flex-row items-center px-3 ${
-        changed ? "border-yellow-400" : "border-[#665524]"
+        error
+          ? "border-red-500"
+          : changed
+            ? "border-yellow-400"
+            : "border-[#665524]"
       }`}
     >
-      {prefix && <Text className="text-gray-400 font-pmedium mr-1">{prefix}</Text>}
+      {prefix && (
+        <Text className="text-gray-400 font-pmedium mr-1">{prefix}</Text>
+      )}
       <TextInput
         className="flex-1 text-white font-pmedium"
         style={
@@ -73,13 +85,20 @@ const Field = ({
         multiline={multiline}
       />
     </View>
+    {error ? (
+      <Text className="text-red-400 text-xs mt-1 ml-1">{error}</Text>
+    ) : null}
   </View>
 );
 
-// ------------------------------------------------------------
+// ============================================================
+// Screen
+// ============================================================
 export default function RouteDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const dispatch = useDispatch<AppDispatch>();
+  const insets = useSafeAreaInsets();
+  const { alert, confirm, toast } = useAlert();
 
   const { summaries, stops, loading, submitError } = useSelector(
     (s: RootState) => s.routes
@@ -96,15 +115,19 @@ export default function RouteDetail() {
     default_fee: 0,
     notes: "",
   });
+  const [nameError, setNameError] = useState<string | undefined>();
   const [newStop, setNewStop] = useState("");
   const [saving, setSaving] = useState(false);
+  const [addingStop, setAddingStop] = useState(false);
 
   const isAdmin = profile?.role === "admin";
 
   useEffect(() => {
     if (summaries.length === 0) dispatch(fetchRouteSummaries());
     dispatch(fetchRouteStops(id));
-    return () => { dispatch(clearRouteSubmitState()); };
+    return () => {
+      dispatch(clearRouteSubmitState());
+    };
   }, [id]);
 
   useEffect(() => {
@@ -116,15 +139,23 @@ export default function RouteDetail() {
         default_fee: route.default_fee ?? 0,
         notes: route.notes ?? "",
       });
+      setNameError(undefined);
     }
   }, [route?.id]);
 
+  // Surface thunk failures (e.g. deactivating a route with students on it)
   useEffect(() => {
-    if (submitError) Alert.alert("Couldn't save", submitError);
+    if (submitError) {
+      alert("Couldn't save", submitError, undefined, { tone: "danger" });
+      dispatch(clearRouteSubmitState());
+    }
   }, [submitError]);
 
+  // ----------------------------------------------------------
+  // Diff — only changed fields get sent
+  // ----------------------------------------------------------
   const changes = useMemo(() => {
-    if (!route) return {};
+    if (!route) return {} as Record<string, any>;
     const diff: Record<string, any> = {};
     if (form.name !== route.name) diff.name = form.name;
     if (form.start_point !== (route.start_point ?? ""))
@@ -140,88 +171,127 @@ export default function RouteDetail() {
   const isDirty = Object.keys(changes).length > 0;
   const changedKeys = new Set(Object.keys(changes));
 
+  // ----------------------------------------------------------
   const handleSave = async () => {
     if (!isDirty) return;
+
     if (!form.name.trim() || form.name.trim().length < 3) {
-      Alert.alert("Invalid name", "Route name needs at least 3 characters.");
+      setNameError("Route name needs at least 3 characters");
+      toast("Check the route name", "warning");
       return;
     }
 
+    setNameError(undefined);
     setSaving(true);
     const result = await dispatch(updateRoute({ id, changes }));
     setSaving(false);
 
     if (updateRoute.fulfilled.match(result)) {
       dispatch(fetchRouteSummaries());
-      Alert.alert("Saved", "Route details updated.");
+      toast("Route details saved");
     }
   };
 
   const handleAddStop = async () => {
-    if (!newStop.trim()) return;
+    const name = newStop.trim();
+    if (!name || addingStop) return;
 
-    const dupe = routeStops.some(
-      (s) => s.name.toLowerCase() === newStop.trim().toLowerCase()
-    );
-    if (dupe) {
-      Alert.alert("Duplicate stop", "That stop already exists on this route.");
+    if (name.length < 2) {
+      toast("Stop name is too short", "warning");
       return;
     }
 
-    await dispatch(addRouteStop({ routeId: id, name: newStop }));
-    setNewStop("");
-    dispatch(fetchRouteSummaries());
+    const dupe = routeStops.some(
+      (s) => s.name.toLowerCase() === name.toLowerCase()
+    );
+    if (dupe) {
+      alert(
+        "Duplicate stop",
+        "That stop already exists on this route.",
+        undefined,
+        { tone: "warning" }
+      );
+      return;
+    }
+
+    setAddingStop(true);
+    const result = await dispatch(addRouteStop({ routeId: id, name }));
+    setAddingStop(false);
+
+    if (addRouteStop.fulfilled.match(result)) {
+      setNewStop("");
+      dispatch(fetchRouteSummaries());
+      toast(`"${name}" added`);
+    } else {
+      alert("Couldn't add stop", result.payload as string, undefined, {
+        tone: "danger",
+      });
+    }
   };
 
-  const handleDeleteStop = (stopId: string, name: string) => {
-    Alert.alert("Remove stop?", `"${name}" will be removed from this route.`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          await dispatch(deleteRouteStop({ routeId: id, stopId }));
-          dispatch(fetchRouteSummaries());
-        },
-      },
-    ]);
+  const handleDeleteStop = async (stopId: string, name: string) => {
+    const ok = await confirm({
+      title: "Remove stop?",
+      message: `"${name}" will be removed from this route.`,
+      confirmText: "Remove",
+      tone: "danger",
+    });
+
+    if (!ok) return;
+
+    const result = await dispatch(deleteRouteStop({ routeId: id, stopId }));
+
+    if (deleteRouteStop.fulfilled.match(result)) {
+      dispatch(fetchRouteSummaries());
+      toast("Stop removed");
+    }
   };
 
-  const handleToggleActive = () => {
+  const handleToggleActive = async () => {
     if (!route) return;
-    const off = route.is_active;
-    Alert.alert(
-      off ? "Deactivate route?" : "Activate route?",
-      off
+    const turningOff = route.is_active;
+
+    const ok = await confirm({
+      title: turningOff ? "Deactivate route?" : "Activate route?",
+      message: turningOff
         ? "It will stop appearing when admitting students."
         : "It will become selectable during admission.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: off ? "Deactivate" : "Activate",
-          style: off ? "destructive" : "default",
-          onPress: async () => {
-            await dispatch(
-              toggleRouteActive({ id, is_active: !route.is_active })
-            );
-            dispatch(fetchRouteSummaries());
-          },
-        },
-      ]
+      confirmText: turningOff ? "Deactivate" : "Activate",
+      tone: turningOff ? "danger" : "info",
+    });
+
+    if (!ok) return;
+
+    const result = await dispatch(
+      toggleRouteActive({ id, is_active: !route.is_active })
     );
+
+    if (toggleRouteActive.fulfilled.match(result)) {
+      dispatch(fetchRouteSummaries());
+      toast(turningOff ? "Route deactivated" : "Route activated");
+    }
+    // Rejection is handled by the submitError effect above —
+    // it carries the "N students are still on this route" message
   };
 
-  const handleBack = () => {
+  const handleBack = async () => {
     if (!isDirty) {
       router.back();
       return;
     }
-    Alert.alert("Discard changes?", "Your edits haven't been saved.", [
-      { text: "Keep editing", style: "cancel" },
-      { text: "Discard", style: "destructive", onPress: () => router.back() },
-    ]);
+
+    const discard = await confirm({
+      title: "Discard changes?",
+      message: "Your edits haven't been saved.",
+      confirmText: "Discard",
+      cancelText: "Keep editing",
+      tone: "danger",
+    });
+
+    if (discard) router.back();
   };
 
+  // ----------------------------------------------------------
   if (loading && !route) {
     return (
       <View className="flex-1 bg-appBg items-center justify-center">
@@ -234,9 +304,12 @@ export default function RouteDetail() {
     return (
       <View className="flex-1 bg-appBg items-center justify-center px-8">
         <Text className="text-gray-300 font-pmedium mb-2">Route not found</Text>
+        <Text className="text-gray-600 text-xs text-center">
+          It may have been removed, or you don't have access to it.
+        </Text>
         <TouchableOpacity
           onPress={() => router.back()}
-          className="border border-yellow-400 px-6 h-11 rounded-xl justify-center mt-4"
+          className="border border-yellow-400 px-6 h-11 rounded-xl justify-center mt-6"
         >
           <Text className="text-yellow-400 font-pmedium text-xs">Go back</Text>
         </TouchableOpacity>
@@ -246,23 +319,35 @@ export default function RouteDetail() {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={0}
       className="flex-1 bg-appBg"
     >
       <ScrollView
-        className="flex-1 px-4 pt-12"
+        className="flex-1"
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingTop: insets.top + 16,
+          paddingBottom: insets.bottom + 40,
+        }}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
+        {/* Header */}
         <View className="flex-row items-center gap-3 mb-5">
           <TouchableOpacity
             onPress={handleBack}
             className="w-10 h-10 rounded-full border border-[#665524] items-center justify-center"
           >
-               <Ionicons name="arrow-back" size={15} color="yellow" />
+            <Ionicons name="arrow-back" size={16} color="#FACC15" />
           </TouchableOpacity>
+
           <View className="flex-1">
-            <Text className="text-white font-psemibold text-lg" numberOfLines={1}>
+            <Text
+              className="text-white font-psemibold text-lg"
+              numberOfLines={1}
+            >
               {route.name}
             </Text>
             <Text className="text-gray-500 text-xs">
@@ -271,12 +356,13 @@ export default function RouteDetail() {
               {routeStops.length === 1 ? "" : "s"}
             </Text>
           </View>
+
           <TouchableOpacity
             onPress={handleToggleActive}
             disabled={!isAdmin}
             className={`px-3 py-1.5 rounded-full ${
               route.is_active ? "bg-green-950" : "bg-gray-800"
-            }`}
+            } ${!isAdmin ? "opacity-60" : ""}`}
           >
             <Text
               className={`text-xs font-pmedium ${
@@ -305,9 +391,13 @@ export default function RouteDetail() {
             <Field
               label="Route name"
               value={form.name}
-              onChangeText={(t) => setForm((p) => ({ ...p, name: t }))}
+              onChangeText={(t) => {
+                setForm((p) => ({ ...p, name: t }));
+                if (nameError) setNameError(undefined);
+              }}
               placeholder="Route A — Sector 14"
               changed={changedKeys.has("name")}
+              error={nameError}
             />
             <Field
               label="Starts at"
@@ -350,7 +440,11 @@ export default function RouteDetail() {
               onPress={handleSave}
               disabled={!isDirty || saving}
               className={`h-12 justify-center items-center rounded-xl mb-6 ${
-                saving ? "bg-yellow-700" : isDirty ? "bg-yellow-500" : "bg-gray-800"
+                saving
+                  ? "bg-yellow-700"
+                  : isDirty
+                    ? "bg-yellow-500"
+                    : "bg-gray-800"
               }`}
             >
               {saving ? (
@@ -394,7 +488,9 @@ export default function RouteDetail() {
 
         {routeStops.length === 0 && (
           <Text className="text-gray-600 text-xs mb-3 ml-1">
-            No stops yet. Add the first pickup point below.
+            {isAdmin
+              ? "No stops yet. Add the first pickup point below."
+              : "No stops have been added to this route."}
           </Text>
         )}
 
@@ -408,22 +504,26 @@ export default function RouteDetail() {
                 {stop.sequence}
               </Text>
             </View>
-            <Text className="text-white font-pmedium text-sm flex-1" numberOfLines={1}>
+            <Text
+              className="text-white font-pmedium text-sm flex-1"
+              numberOfLines={1}
+            >
               {stop.name}
             </Text>
             {isAdmin && (
               <TouchableOpacity
                 onPress={() => handleDeleteStop(stop.id, stop.name)}
-                hitSlop={8}
+                hitSlop={10}
+                className="w-7 h-7 items-center justify-center"
               >
-                <Text className="text-red-400 text-lg">×</Text>
+                <Ionicons name="close" size={18} color="#F87171" />
               </TouchableOpacity>
             )}
           </View>
         ))}
 
         {isAdmin && (
-          <View className="flex-row items-center gap-2 mt-2 mb-10">
+          <View className="flex-row items-center gap-2 mt-2">
             <View className="flex-1 border-2 border-[#665524] rounded-xl px-3">
               <TextInput
                 className="text-white font-pmedium"
@@ -434,24 +534,35 @@ export default function RouteDetail() {
                 onChangeText={setNewStop}
                 onSubmitEditing={handleAddStop}
                 returnKeyType="done"
+                editable={!addingStop}
               />
             </View>
             <TouchableOpacity
               onPress={handleAddStop}
-              disabled={!newStop.trim()}
+              disabled={!newStop.trim() || addingStop}
               className={`px-5 h-12 rounded-xl items-center justify-center ${
-                newStop.trim() ? "bg-yellow-500" : "bg-gray-800"
+                newStop.trim() && !addingStop ? "bg-yellow-500" : "bg-gray-800"
               }`}
             >
-              <Text
-                className={`font-psemibold text-xs ${
-                  newStop.trim() ? "text-black" : "text-gray-500"
-                }`}
-              >
-                Add
-              </Text>
+              {addingStop ? (
+                <ActivityIndicator size="small" color="#000" />
+              ) : (
+                <Text
+                  className={`font-psemibold text-xs ${
+                    newStop.trim() ? "text-black" : "text-gray-500"
+                  }`}
+                >
+                  Add
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
+        )}
+
+        {isAdmin && routeStops.length > 0 && (
+          <Text className="text-gray-600 text-xs mt-3 ml-1">
+            Stops are numbered in pickup order. Removing one renumbers the rest.
+          </Text>
         )}
       </ScrollView>
     </KeyboardAvoidingView>

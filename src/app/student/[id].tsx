@@ -7,8 +7,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Linking,
-  Alert,
 } from "react-native";
+import { useAlert } from "@/components/AlertProvider";
 import React, { useEffect, useState } from "react";
 import { useLocalSearchParams, router } from "expo-router";
 import { useSelector } from "react-redux";
@@ -16,6 +16,7 @@ import { RootState } from "@/redux/store";
 import { supabase } from "@/lib/supabase";
 import { Student } from "@/redux/slice/admissionslice";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const Row = ({ label, value }: { label: string; value?: string | null }) => (
   <View className="flex-row justify-between py-3 border-b border-gray-800">
@@ -30,9 +31,10 @@ const Row = ({ label, value }: { label: string; value?: string | null }) => (
 );
 
 export default function StudentDetail() {
+  const { alert, confirm, toast } = useAlert();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useSelector((s: RootState) => s.profile);
-
+  const insets = useSafeAreaInsets();
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,28 +71,56 @@ export default function StudentDetail() {
       Linking.openURL(`tel:+91${student.parent_phone}`);
   };
 
-  const deactivate = () => {
-    Alert.alert(
-      "Deactivate student",
-      `${student?.student_name} will stop appearing in active counts. This can be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Deactivate",
-          style: "destructive",
-          onPress: async () => {
-            const { error } = await supabase
-              .from("students")
-              .update({ status: "inactive" })
-              .eq("id", id);
+  // const deactivate = () => {
+  //   alert(
+  //     "Deactivate student",
+  //     `${student?.student_name} will stop appearing in active counts. This can be undone.`,
+  //     [
+  //       { text: "Cancel", style: "cancel" },
+  //       {
+  //         text: "Deactivate",
+  //         style: "destructive",
+  //         onPress: async () => {
+  //           const { error } = await supabase
+  //             .from("students")
+  //             .update({ status: "inactive" })
+  //             .eq("id", id);
 
-            if (error) Alert.alert("Failed", error.message);
-            else router.back();
-          },
+  //           if (error) alert("Failed", error.message);
+  //           else router.back();
+  //         },
+  //       },
+  //     ],
+  //   );
+  // };
+  const deactivate = () => {
+  alert(
+    "Deactivate student",
+    `${student?.student_name} will stop appearing in active counts. This can be undone.`,
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Deactivate",
+        style: "destructive",
+        keepOpenWhileLoading: true,
+        onPress: async () => {
+          const { error } = await supabase
+            .from("students")
+            .update({ status: "inactive" })
+            .eq("id", id);
+
+          if (error) {
+            toast(error.message, "danger");
+          } else {
+            toast("Student deactivated");
+            router.back();
+          }
         },
-      ],
-    );
-  };
+      },
+    ],
+    { tone: "danger" }
+  );
+};
 
   if (loading) {
     return (
@@ -126,8 +156,15 @@ export default function StudentDetail() {
 
   return (
     <ScrollView
-      className="flex-1 bg-appBg px-4 pt-12"
       showsVerticalScrollIndicator={false}
+      className="flex-1 bg-appBg "
+      contentContainerStyle={{
+        paddingHorizontal: 16,
+        paddingTop: insets.top + 16,
+        paddingBottom: insets.bottom + 40,
+      }}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
     >
       <TouchableOpacity
         onPress={() => router.back()}

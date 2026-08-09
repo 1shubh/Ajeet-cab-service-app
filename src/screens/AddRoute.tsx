@@ -20,6 +20,7 @@ import {
   RouteInput,
 } from "@/redux/slice/routeslice";
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useAlert } from "@/components/AlertProvider";
 // ------------------------------------------------------------
 const Field = ({
   label,
@@ -72,7 +73,7 @@ const Field = ({
 export default function AddRoute() {
   const dispatch = useDispatch<AppDispatch>();
   const { submitting, submitError } = useSelector((s: RootState) => s.routes);
-
+  const {alert,confirm,toast} = useAlert()
   const [form, setForm] = useState<RouteInput>({
     name: "",
     start_point: "",

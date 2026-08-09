@@ -60,8 +60,8 @@ const AdminTabLayout = () => {
         headerShown: false,
         tabBarShowLabel: false, // we render our own label inside the icon
         tabBarStyle: {
-          height: 62 + insets.bottom,
-          paddingTop: 8,
+          height: 60 + insets.bottom,
+          paddingTop: 18,
           paddingBottom: insets.bottom || 8,
           backgroundColor: BG,
           borderTopWidth: 0,
@@ -127,6 +127,7 @@ const AdminTabLayout = () => {
       <Tabs.Screen
         name="profile"
         options={{
+          href: null,
           tabBarIcon: ({ focused }) => (
             <TabItem
               focused={focused}
@@ -134,6 +135,20 @@ const AdminTabLayout = () => {
               inactiveIcon={icons.useroutlined}
               label="Profile"
               iconClass="w-5 h-6"
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="vehicles"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabItem
+              focused={focused}
+              activeIcon={icons.van}
+              inactiveIcon={icons.vanoutlined}
+              label="Van"
+              iconClass="w-6 h-6"
             />
           ),
         }}
